@@ -4,8 +4,8 @@ import SwiftUI
 struct SeriesDetailView: View {
     @Environment(ContentStore.self) private var store
     @Environment(PlaybackCoordinator.self) private var playback
+    @Environment(ProfileStore.self) private var profiles
     @Environment(\.modelContext) private var modelContext
-    @Query private var favorites: [FavoriteEntity]
     @Query private var watchProgress: [WatchProgressEntity]
 
     @State private var model: SeriesDetailViewModel
@@ -15,10 +15,7 @@ struct SeriesDetailView: View {
     }
 
     private var series: Series { model.series }
-
-    private var isFavorite: Bool {
-        favorites.contains { $0.key == series.id }
-    }
+    private var profileID: UUID { profiles.currentID ?? UUID() }
 
     var body: some View {
         ScrollView {
@@ -70,17 +67,7 @@ struct SeriesDetailView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Button {
-                    toggleFavorite()
-                } label: {
-                    Label(
-                        isFavorite ? "Favorited" : "Favorite",
-                        systemImage: isFavorite ? "star.fill" : "star"
-                    )
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(isFavorite ? .yellow : .primary)
-                }
-                .buttonStyle(.glass)
+                FavoriteToggleButton(contentKey: series.id, kind: .series, profileID: profileID, style: .labeled)
 
                 if let plot = series.plot, !plot.isEmpty {
                     Text(plot)
@@ -141,7 +128,7 @@ struct SeriesDetailView: View {
     }
 
     private func episodeRow(_ episode: Episode) -> some View {
-        let progress = watchProgress.first { $0.key == episode.id }
+        let progress = watchProgress.first { $0.contentKey == episode.id && $0.profileID == profiles.currentID }
 
         return Button {
             playback.play(episode.playable(in: series))
@@ -181,14 +168,5 @@ struct SeriesDetailView: View {
             .glassEffect(.regular, in: .rect(cornerRadius: 16))
         }
         .buttonStyle(.plain)
-    }
-
-    private func toggleFavorite() {
-        if let existing = favorites.first(where: { $0.key == series.id }) {
-            modelContext.delete(existing)
-        } else {
-            modelContext.insert(FavoriteEntity(key: series.id, kind: .series))
-        }
-        try? modelContext.save()
     }
 }

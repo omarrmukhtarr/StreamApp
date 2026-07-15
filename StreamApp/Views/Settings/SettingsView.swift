@@ -3,20 +3,36 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(ContentStore.self) private var store
+    @Environment(ProfileStore.self) private var profiles
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
     @Query(sort: \PlaylistEntity.createdAt) private var playlists: [PlaylistEntity]
     @Query private var favorites: [FavoriteEntity]
     @Query private var watchProgress: [WatchProgressEntity]
+    @Query private var allProfiles: [ProfileEntity]
 
     @State private var showAddPlaylist = false
+    @State private var showProfiles = false
     @State private var confirmClearHistory = false
     @State private var confirmClearFavorites = false
+
+    private var currentProfile: ProfileEntity? {
+        allProfiles.first { $0.id == profiles.currentID }
+    }
+
+    private var scopedFavorites: [FavoriteEntity] {
+        favorites.filter { $0.profileID == profiles.currentID }
+    }
+
+    private var scopedProgress: [WatchProgressEntity] {
+        watchProgress.filter { $0.profileID == profiles.currentID }
+    }
 
     var body: some View {
         NavigationStack {
             List {
+                profileSection
                 playlistsSection
                 epgSection
                 librarySection
@@ -35,6 +51,38 @@ struct SettingsView: View {
             .sheet(isPresented: $showAddPlaylist) {
                 AddPlaylistView()
             }
+            .sheet(isPresented: $showProfiles) {
+                ProfilesView()
+            }
+        }
+    }
+
+    // MARK: - Profile
+
+    private var profileSection: some View {
+        Section("Profile") {
+            Button {
+                showProfiles = true
+            } label: {
+                HStack(spacing: 12) {
+                    if let currentProfile {
+                        ProfileAvatar(profile: currentProfile, size: 40)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(currentProfile.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text("Switch or manage profiles")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -111,11 +159,11 @@ struct SettingsView: View {
             Button(role: .destructive) {
                 confirmClearHistory = true
             } label: {
-                Label("Clear Watch History (\(watchProgress.count))", systemImage: "trash")
+                Label("Clear Watch History (\(scopedProgress.count))", systemImage: "trash")
             }
-            .confirmationDialog("Clear all watch history?", isPresented: $confirmClearHistory, titleVisibility: .visible) {
+            .confirmationDialog("Clear watch history for this profile?", isPresented: $confirmClearHistory, titleVisibility: .visible) {
                 Button("Clear History", role: .destructive) {
-                    watchProgress.forEach(modelContext.delete)
+                    scopedProgress.forEach(modelContext.delete)
                     try? modelContext.save()
                 }
             }
@@ -123,11 +171,11 @@ struct SettingsView: View {
             Button(role: .destructive) {
                 confirmClearFavorites = true
             } label: {
-                Label("Clear Favorites (\(favorites.count))", systemImage: "star.slash")
+                Label("Clear Favorites (\(scopedFavorites.count))", systemImage: "star.slash")
             }
-            .confirmationDialog("Remove all favorites?", isPresented: $confirmClearFavorites, titleVisibility: .visible) {
+            .confirmationDialog("Remove favorites for this profile?", isPresented: $confirmClearFavorites, titleVisibility: .visible) {
                 Button("Clear Favorites", role: .destructive) {
-                    favorites.forEach(modelContext.delete)
+                    scopedFavorites.forEach(modelContext.delete)
                     try? modelContext.save()
                 }
             }

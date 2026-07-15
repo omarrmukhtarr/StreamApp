@@ -6,6 +6,7 @@ struct PlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(ContentStore.self) private var store
+    @Environment(ProfileStore.self) private var profiles
 
     @State private var model: PlayerViewModel
 
@@ -44,7 +45,7 @@ struct PlayerView: View {
         .statusBarHidden(!model.controlsVisible)
         .persistentSystemOverlays(.hidden)
         .onAppear {
-            model.configure(context: modelContext)
+            model.configure(context: modelContext, profileID: profiles.currentID)
             model.start()
         }
         .onDisappear {
@@ -122,6 +123,10 @@ struct PlayerView: View {
 
                 Spacer()
 
+                if model.hasSubtitles || model.hasMultipleAudio {
+                    mediaSelectionMenu
+                }
+
                 AirPlayButton()
                     .frame(width: 40, height: 40)
                     .glassEffect(.regular, in: .circle)
@@ -158,6 +163,52 @@ struct PlayerView: View {
             return "Now: \(program.title)"
         }
         return model.item.subtitle
+    }
+
+    private var mediaSelectionMenu: some View {
+        Menu {
+            if model.hasSubtitles {
+                Picker("Subtitles", selection: subtitleBinding) {
+                    ForEach(model.subtitleOptions) { option in
+                        Text(option.name).tag(option.id)
+                    }
+                }
+            }
+            if model.hasMultipleAudio {
+                Picker("Audio", selection: audioBinding) {
+                    ForEach(model.audioOptions) { option in
+                        Text(option.name).tag(Optional(option.id))
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "captions.bubble")
+                .font(.headline)
+                .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.glass)
+    }
+
+    private var subtitleBinding: Binding<String> {
+        Binding(
+            get: { model.currentSubtitleID },
+            set: { id in
+                if let option = model.subtitleOptions.first(where: { $0.id == id }) {
+                    model.selectSubtitle(option)
+                }
+            }
+        )
+    }
+
+    private var audioBinding: Binding<String?> {
+        Binding(
+            get: { model.currentAudioID },
+            set: { id in
+                if let id, let option = model.audioOptions.first(where: { $0.id == id }) {
+                    model.selectAudio(option)
+                }
+            }
+        )
     }
 
     private var centerControls: some View {
