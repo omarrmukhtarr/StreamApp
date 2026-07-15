@@ -4,9 +4,8 @@ import SwiftUI
 struct MovieDetailView: View {
     @Environment(ContentStore.self) private var store
     @Environment(PlaybackCoordinator.self) private var playback
+    @Environment(ProfileStore.self) private var profiles
     @Environment(\.modelContext) private var modelContext
-    @Query private var favorites: [FavoriteEntity]
-    @Query private var watchProgress: [WatchProgressEntity]
 
     @State private var movie: Movie
 
@@ -14,19 +13,16 @@ struct MovieDetailView: View {
         _movie = State(initialValue: movie)
     }
 
-    private var isFavorite: Bool {
-        favorites.contains { $0.key == movie.id }
-    }
+    private var profileID: UUID { profiles.currentID ?? UUID() }
 
     private var progress: WatchProgressEntity? {
-        watchProgress.first { $0.key == movie.id }
+        Library.watchProgress(for: movie.id, profileID: profileID, in: modelContext)
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-
                 actionButtons
 
                 if let plot = movie.plot, !plot.isEmpty {
@@ -89,28 +85,35 @@ struct MovieDetailView: View {
     }
 
     private var actionButtons: some View {
-        HStack(spacing: 12) {
-            Button {
-                playback.play(movie.playable)
-            } label: {
-                Label(progress != nil ? "Resume" : "Play", systemImage: "play.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-            }
-            .buttonStyle(.glassProminent)
-            .tint(.brandPrimary)
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Button {
+                    playback.play(movie.playable)
+                } label: {
+                    Label(progress != nil ? "Resume" : "Play", systemImage: "play.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.glassProminent)
+                .tint(.brandPrimary)
 
-            Button {
-                toggleFavorite()
-            } label: {
-                Image(systemName: isFavorite ? "star.fill" : "star")
-                    .font(.headline)
-                    .foregroundStyle(isFavorite ? .yellow : .primary)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 4)
+                FavoriteToggleButton(contentKey: movie.id, kind: .movie, profileID: profileID)
+
+                DownloadButton(item: movie.playable, profileID: profileID)
             }
-            .buttonStyle(.glass)
+
+            if let trailer = movie.trailerPlayable {
+                Button {
+                    playback.play(trailer)
+                } label: {
+                    Label("Watch Trailer", systemImage: "movieclapper")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                }
+                .buttonStyle(.glass)
+            }
         }
         .padding(.horizontal)
     }
@@ -142,15 +145,6 @@ struct MovieDetailView: View {
             Text(value)
                 .font(.caption)
         }
-    }
-
-    private func toggleFavorite() {
-        if let existing = favorites.first(where: { $0.key == movie.id }) {
-            modelContext.delete(existing)
-        } else {
-            modelContext.insert(FavoriteEntity(key: movie.id, kind: .movie))
-        }
-        try? modelContext.save()
     }
 
     /// Fetches extended Xtream metadata (plot, cast, genre) on demand.
