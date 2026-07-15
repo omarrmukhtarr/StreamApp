@@ -7,6 +7,10 @@ A modern IPTV & streaming app for iOS 26, built with SwiftUI, MVVM and Apple's L
 ## Features
 
 - **Demo Mode** — the app launches fully populated with sample channels, movies, series and a working TV guide (public test streams), so every screen is usable before you add a source.
+- **Multi-profile** — Netflix-style profiles, each with its own favorites, watch history and downloads (plus a Kids flag). Switch from the Home avatar or Settings.
+- **Offline downloads** — save movies for offline viewing with live progress; a Downloads screen and a Home "Downloaded" rail.
+- **Subtitles & audio tracks** — pick embedded subtitle and alternate audio tracks from inside the player.
+- **Trailers** — a Trailers rail on Home and a Watch Trailer button on movie detail.
 - **Playlist sources** — M3U/M3U8 playlists and Xtream Codes accounts, with connection validation before saving. Manage multiple playlists and switch the active one in Settings.
 - **Live TV** — channel list with category filter chips, channel logos, search, and swipe-to-favorite.
 - **TV Guide (EPG)** — XMLTV guides (plain or `.gz` compressed) parsed in the background; now-playing and up-next shown in channel rows and inside the player. Xtream accounts load the guide automatically from `xmltv.php`.

@@ -29,6 +29,8 @@ struct Movie: Identifiable, Hashable, Codable {
     var genre: String?
     var cast: String?
     var durationText: String?
+    /// Direct-playable trailer stream, when available.
+    var trailerURL: URL?
 }
 
 // MARK: - Series
@@ -96,6 +98,23 @@ extension Movie {
             subtitle: year,
             artworkURL: posterURL,
             url: streamURL,
+            epgChannelID: nil
+        )
+    }
+
+    var hasTrailer: Bool { trailerURL != nil }
+
+    /// A playable item for the trailer (kept distinct so it never overwrites
+    /// the movie's own watch progress).
+    var trailerPlayable: PlayableItem? {
+        guard let trailerURL else { return nil }
+        return PlayableItem(
+            id: "\(id)|trailer",
+            kind: .movie,
+            title: "\(title) — Trailer",
+            subtitle: year,
+            artworkURL: posterURL,
+            url: trailerURL,
             epgChannelID: nil
         )
     }
