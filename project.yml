@@ -1,0 +1,45 @@
+name: StreamApp
+options:
+  bundleIdPrefix: com.omermukhtar
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_USER_SCRIPT_SANDBOXING: true
+targets:
+  StreamApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: StreamApp
+    info:
+      path: StreamApp/Info.plist
+      properties:
+        CFBundleDisplayName: StreamApp
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - audio
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        NSLocalNetworkUsageDescription: StreamApp connects to media servers on your local network to stream content.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.omermukhtar.streamapp
+        INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
+        SUPPORTS_MACCATALYST: false
