@@ -9,6 +9,13 @@ import SwiftUI
 @Observable
 final class PlayerViewModel {
 
+    /// Lightweight, view-friendly description of a subtitle or audio track.
+    struct MediaOption: Identifiable, Hashable {
+        let id: String
+        let name: String
+        let isOff: Bool
+    }
+
     let item: PlayableItem
     let player = AVPlayer()
 
@@ -21,26 +28,44 @@ final class PlayerViewModel {
     var controlsVisible = true
     var isAspectFill = false
 
+    // Media selection (subtitles / audio)
+    private(set) var subtitleOptions: [MediaOption] = []
+    private(set) var audioOptions: [MediaOption] = []
+    private(set) var currentSubtitleID: String = MediaOption.offID
+    private(set) var currentAudioID: String?
+
     private var timeObserver: Any?
     private var statusObservation: NSKeyValueObservation?
     private var itemStatusObservation: NSKeyValueObservation?
-    private var pipController: AVPictureInPictureController?
+    private let pip = PiPCoordinator()
+    private(set) var isPiPActive = false
     private var modelContext: ModelContext?
+    private var profileID: UUID?
     private var hideControlsTask: Task<Void, Never>?
     private var ticksSinceSave = 0
+
+    private var legibleGroup: AVMediaSelectionGroup?
+    private var audibleGroup: AVMediaSelectionGroup?
+    private var legibleOptions: [AVMediaSelectionOption] = []
+    private var audibleOptions: [AVMediaSelectionOption] = []
 
     var isLive: Bool { item.kind == .live }
     var canSkip: Bool { !isLive && duration > 0 }
     var isPiPSupported: Bool { AVPictureInPictureController.isPictureInPictureSupported() }
+    var hasSubtitles: Bool { subtitleOptions.count > 1 }
+    var hasMultipleAudio: Bool { audioOptions.count > 1 }
 
     init(item: PlayableItem) {
         self.item = item
+        pip.onStart = { [weak self] in self?.isPiPActive = true }
+        pip.onStop = { [weak self] in self?.isPiPActive = false }
     }
 
     // MARK: - Lifecycle
 
-    func configure(context: ModelContext) {
-        modelContext = context
+    func configure(context: ModelContext, profileID: UUID?) {
+        self.modelContext = context
+        self.profileID = profileID
     }
 
     func start() {
@@ -55,6 +80,7 @@ final class PlayerViewModel {
                 case .readyToPlay:
                     let seconds = observedItem.duration.seconds
                     self.duration = seconds.isFinite ? seconds : 0
+                    await self.loadMediaOptions(for: observedItem)
                 case .failed:
                     self.failureMessage = "This stream could not be played. It may be offline or in an unsupported format."
                     self.isBuffering = false
@@ -97,6 +123,7 @@ final class PlayerViewModel {
         }
         statusObservation = nil
         itemStatusObservation = nil
+        pip.detach()
         player.pause()
         player.replaceCurrentItem(with: nil)
         UIApplication.shared.isIdleTimerDisabled = false
@@ -147,12 +174,56 @@ final class PlayerViewModel {
     // MARK: - Picture in Picture
 
     func attach(layer: AVPlayerLayer) {
-        guard pipController == nil, AVPictureInPictureController.isPictureInPictureSupported() else { return }
-        pipController = AVPictureInPictureController(playerLayer: layer)
+        pip.attach(layer: layer)
     }
 
     func startPictureInPicture() {
-        pipController?.startPictureInPicture()
+        pip.start()
+    }
+
+    // MARK: - Media Selection (Subtitles / Audio)
+
+    private func loadMediaOptions(for playerItem: AVPlayerItem) async {
+        let asset = playerItem.asset
+
+        if let legible = try? await asset.loadMediaSelectionGroup(for: .legible) {
+            legibleGroup = legible
+            legibleOptions = legible.options
+            subtitleOptions = [MediaOption(id: MediaOption.offID, name: "Off", isOff: true)]
+                + legible.options.enumerated().map { index, option in
+                    MediaOption(id: String(index), name: option.displayName, isOff: false)
+                }
+            let selected = playerItem.currentMediaSelection.selectedMediaOption(in: legible)
+            currentSubtitleID = selected.flatMap { legible.options.firstIndex(of: $0) }.map(String.init) ?? MediaOption.offID
+        }
+
+        if let audible = try? await asset.loadMediaSelectionGroup(for: .audible) {
+            audibleGroup = audible
+            audibleOptions = audible.options
+            audioOptions = audible.options.enumerated().map { index, option in
+                MediaOption(id: String(index), name: option.displayName, isOff: false)
+            }
+            let selected = playerItem.currentMediaSelection.selectedMediaOption(in: audible)
+            currentAudioID = selected.flatMap { audible.options.firstIndex(of: $0) }.map(String.init)
+        }
+    }
+
+    func selectSubtitle(_ option: MediaOption) {
+        guard let group = legibleGroup else { return }
+        if option.isOff {
+            player.currentItem?.select(nil, in: group)
+        } else if let index = Int(option.id), legibleOptions.indices.contains(index) {
+            player.currentItem?.select(legibleOptions[index], in: group)
+        }
+        currentSubtitleID = option.id
+        scheduleControlsHide()
+    }
+
+    func selectAudio(_ option: MediaOption) {
+        guard let group = audibleGroup, let index = Int(option.id), audibleOptions.indices.contains(index) else { return }
+        player.currentItem?.select(audibleOptions[index], in: group)
+        currentAudioID = option.id
+        scheduleControlsHide()
     }
 
     // MARK: - Watch Progress
@@ -170,22 +241,14 @@ final class PlayerViewModel {
     }
 
     private func savedPosition() -> Double? {
-        guard let modelContext else { return nil }
-        let key = item.id
-        let descriptor = FetchDescriptor<WatchProgressEntity>(
-            predicate: #Predicate { $0.key == key }
-        )
-        return try? modelContext.fetch(descriptor).first?.position
+        guard let modelContext, let profileID else { return nil }
+        return Library.watchProgress(for: item.id, profileID: profileID, in: modelContext)?.position
     }
 
     private func saveProgress() {
-        guard !isLive, duration > 0, currentTime > 15, let modelContext else { return }
+        guard !isLive, duration > 0, currentTime > 15, let modelContext, let profileID else { return }
 
-        let key = item.id
-        let descriptor = FetchDescriptor<WatchProgressEntity>(
-            predicate: #Predicate { $0.key == key }
-        )
-        let existing = try? modelContext.fetch(descriptor).first
+        let existing = Library.watchProgress(for: item.id, profileID: profileID, in: modelContext)
 
         // Consider it finished near the end and clear it from Continue Watching.
         if currentTime > duration * 0.95 {
@@ -203,7 +266,8 @@ final class PlayerViewModel {
         } else {
             modelContext.insert(
                 WatchProgressEntity(
-                    key: key,
+                    contentKey: item.id,
+                    profileID: profileID,
                     kind: item.kind,
                     title: item.title,
                     subtitle: item.subtitle,
@@ -218,7 +282,11 @@ final class PlayerViewModel {
     }
 }
 
-// MARK: - Time Formatting
+// MARK: - Helpers
+
+extension PlayerViewModel.MediaOption {
+    static let offID = "off"
+}
 
 extension PlayerViewModel {
     static func timeString(_ seconds: Double) -> String {

@@ -47,6 +47,17 @@ enum MockDataService {
         "https://test-streams.mux.dev/pts_shift/master.m3u8"
     ]
 
+    /// Short, confirmed-playable trailer clips (used for the Trailers row).
+    private static let trailerStreams = [
+        "https://media.w3.org/2010/05/sintel/trailer.mp4",
+        "https://media.w3.org/2010/05/bunny/trailer.mp4",
+        "https://download.blender.org/durian/trailer/sintel_trailer-480p.mp4"
+    ]
+
+    private static func trailerStream(_ index: Int) -> URL? {
+        URL(string: trailerStreams[index % trailerStreams.count])
+    }
+
     /// A stable, deterministic poster/logo for any seed string.
     private static func imageURL(seed: String, width: Int = 300, height: Int = 450) -> URL? {
         let safe = seed.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? seed
@@ -147,7 +158,8 @@ enum MockDataService {
                 rating: seed.rating,
                 addedAt: Date().addingTimeInterval(TimeInterval(-index * 86_400)),
                 vodID: nil,
-                plot: seed.plot
+                plot: seed.plot,
+                trailerURL: trailerStream(index)
             )
         }
     }
