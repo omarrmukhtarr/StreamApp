@@ -42,7 +42,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		02A06B2539EBCCE4B407FE15 /* StreamApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = StreamApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		02A06B2539EBCCE4B407FE15 /* StreamApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StreamApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D6AF714537EF9788FB10C8C /* MovieDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieDetailView.swift; sourceTree = "<group>"; };
 		23927222B8A7EF72D2F8E6A9 /* PlayerSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerSupport.swift; sourceTree = "<group>"; };
 		25B9B1D262379DD25B3D578A /* PlaybackCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCoordinator.swift; sourceTree = "<group>"; };
@@ -269,7 +269,6 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					50AC500F1BAB0081F86A6528 = {
-						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -472,6 +471,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = H46BMG85CJ;
 				INFOPLIST_FILE = StreamApp/Info.plist;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -490,6 +490,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = H46BMG85CJ;
 				INFOPLIST_FILE = StreamApp/Info.plist;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
 				LD_RUNPATH_SEARCH_PATHS = (
