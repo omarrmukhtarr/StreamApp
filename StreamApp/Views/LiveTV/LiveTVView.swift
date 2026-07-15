@@ -4,13 +4,16 @@ import SwiftUI
 struct LiveTVView: View {
     @Environment(ContentStore.self) private var store
     @Environment(PlaybackCoordinator.self) private var playback
+    @Environment(ProfileStore.self) private var profiles
     @Environment(\.modelContext) private var modelContext
     @Query private var favorites: [FavoriteEntity]
 
     @State private var model = LiveTVViewModel()
 
+    private var profileID: UUID { profiles.currentID ?? UUID() }
+
     private var favoriteKeys: Set<String> {
-        Set(favorites.map(\.key))
+        Set(favorites.filter { $0.profileID == profiles.currentID }.map(\.contentKey))
     }
 
     var body: some View {
@@ -83,11 +86,6 @@ struct LiveTVView: View {
     }
 
     private func toggleFavorite(_ channel: LiveChannel) {
-        if let existing = favorites.first(where: { $0.key == channel.id }) {
-            modelContext.delete(existing)
-        } else {
-            modelContext.insert(FavoriteEntity(key: channel.id, kind: .live))
-        }
-        try? modelContext.save()
+        Library.toggleFavorite(contentKey: channel.id, kind: .live, profileID: profileID, in: modelContext)
     }
 }

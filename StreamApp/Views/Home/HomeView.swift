@@ -4,33 +4,52 @@ import SwiftUI
 struct HomeView: View {
     @Environment(ContentStore.self) private var store
     @Environment(PlaybackCoordinator.self) private var playback
+    @Environment(ProfileStore.self) private var profiles
     @Query(sort: \WatchProgressEntity.updatedAt, order: .reverse)
     private var watchProgress: [WatchProgressEntity]
     @Query(sort: \FavoriteEntity.addedAt, order: .reverse)
     private var favorites: [FavoriteEntity]
+    @Query(sort: \DownloadEntity.createdAt, order: .reverse)
+    private var downloads: [DownloadEntity]
+    @Query private var allProfiles: [ProfileEntity]
 
     @State private var showAddPlaylist = false
     @State private var showSettings = false
+    @State private var showProfiles = false
+    @State private var showDownloads = false
+
+    private var currentProfile: ProfileEntity? {
+        allProfiles.first { $0.id == profiles.currentID }
+    }
 
     var body: some View {
         NavigationStack {
             content
                 .appBackground()
                 .navigationTitle("StreamApp")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
+                .toolbar { toolbarContent }
+                .sheet(isPresented: $showAddPlaylist) { AddPlaylistView() }
+                .sheet(isPresented: $showSettings) { SettingsView() }
+                .sheet(isPresented: $showProfiles) { ProfilesView() }
+                .sheet(isPresented: $showDownloads) { DownloadsView() }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            if let currentProfile {
+                Button { showProfiles = true } label: {
+                    ProfileAvatar(profile: currentProfile, size: 30)
                 }
             }
-            .sheet(isPresented: $showAddPlaylist) {
-                AddPlaylistView()
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button { showDownloads = true } label: {
+                Image(systemName: "arrow.down.circle")
             }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
+            Button { showSettings = true } label: {
+                Image(systemName: "gearshape")
             }
         }
     }
@@ -43,33 +62,21 @@ struct HomeView: View {
         case .idle, .loading:
             LoadingStateView(message: "Loading your content…")
         case .failed(let message):
-            ErrorStateView(message: message) {
-                await store.refresh()
-            }
+            ErrorStateView(message: message) { await store.refresh() }
         case .loaded:
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 28) {
-                    if store.isDemo {
-                        demoBanner
-                    }
+                    if store.isDemo { demoBanner }
 
                     statsHeader
 
-                    if !continueWatching.isEmpty {
-                        continueWatchingSection
-                    }
-                    if !favoriteChannels.isEmpty || !favoriteMovies.isEmpty || !favoriteSeries.isEmpty {
-                        favoritesSection
-                    }
-                    if !store.channels.isEmpty {
-                        liveChannelsSection
-                    }
-                    if !store.recentMovies.isEmpty {
-                        recentMoviesSection
-                    }
-                    if !store.series.isEmpty {
-                        seriesSection
-                    }
+                    if !continueWatching.isEmpty { continueWatchingSection }
+                    if !completedDownloads.isEmpty { downloadsSection }
+                    if hasFavorites { favoritesSection }
+                    if !trailerMovies.isEmpty { trailersSection }
+                    if !store.channels.isEmpty { liveChannelsSection }
+                    if !store.recentMovies.isEmpty { recentMoviesSection }
+                    if !store.series.isEmpty { seriesSection }
                 }
                 .padding(.vertical)
             }
@@ -103,162 +110,131 @@ struct HomeView: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
-    // MARK: - Sections
+    // MARK: - Profile-scoped data
 
     private var continueWatching: [WatchProgressEntity] {
-        Array(watchProgress.prefix(15))
+        watchProgress.filter { $0.profileID == profiles.currentID }.prefix(15).map { $0 }
     }
 
+    private var completedDownloads: [DownloadEntity] {
+        downloads.filter { $0.profileID == profiles.currentID && $0.state == .completed }
+    }
+
+    private var scopedFavorites: [FavoriteEntity] {
+        favorites.filter { $0.profileID == profiles.currentID }
+    }
+
+    private var favoriteChannels: [LiveChannel] { scopedFavorites.compactMap { store.channel(forKey: $0.contentKey) } }
+    private var favoriteMovies: [Movie] { scopedFavorites.compactMap { store.movie(forKey: $0.contentKey) } }
+    private var favoriteSeries: [Series] { scopedFavorites.compactMap { store.seriesItem(forKey: $0.contentKey) } }
+    private var hasFavorites: Bool { !favoriteChannels.isEmpty || !favoriteMovies.isEmpty || !favoriteSeries.isEmpty }
+
+    private var trailerMovies: [Movie] { Array(store.movies.filter(\.hasTrailer).prefix(15)) }
+
+    // MARK: - Sections
+
     private var continueWatchingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Continue Watching", systemImage: "play.circle")
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 12) {
-                    ForEach(continueWatching) { progress in
-                        if let playable = progress.playable {
-                            Button {
-                                playback.play(playable)
-                            } label: {
-                                PosterCard(
-                                    title: progress.title,
-                                    imageURL: progress.artworkURLString.flatMap(URL.init(string:)),
-                                    subtitle: progress.subtitle,
-                                    progress: progress.fractionWatched,
-                                    width: 130
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
+        HScrollSection(title: "Continue Watching", systemImage: "play.circle") {
+            ForEach(continueWatching) { progress in
+                if let playable = progress.playable {
+                    Button {
+                        playback.play(playable)
+                    } label: {
+                        PosterCard(
+                            title: progress.title,
+                            imageURL: progress.artworkURLString.flatMap(URL.init(string:)),
+                            subtitle: progress.subtitle,
+                            progress: progress.fractionWatched,
+                            width: 130
+                        )
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal)
             }
         }
     }
 
-    private var favoriteChannels: [LiveChannel] {
-        favorites.compactMap { store.channel(forKey: $0.key) }
-    }
-
-    private var favoriteMovies: [Movie] {
-        favorites.compactMap { store.movie(forKey: $0.key) }
-    }
-
-    private var favoriteSeries: [Series] {
-        favorites.compactMap { store.seriesItem(forKey: $0.key) }
+    private var downloadsSection: some View {
+        HScrollSection(title: "Downloaded", systemImage: "arrow.down.circle") {
+            ForEach(completedDownloads) { download in
+                if let playable = download.playable {
+                    Button {
+                        playback.play(playable)
+                    } label: {
+                        PosterCard(
+                            title: download.title,
+                            imageURL: download.artworkURLString.flatMap(URL.init(string:)),
+                            subtitle: "Offline",
+                            width: 120
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     private var favoritesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Favorites", systemImage: "star")
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 12) {
-                    ForEach(favoriteChannels) { channel in
-                        Button {
-                            playback.play(channel.playable)
-                        } label: {
-                            favoriteChannelCard(channel)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    ForEach(favoriteMovies) { movie in
-                        NavigationLink {
-                            MovieDetailView(movie: movie)
-                        } label: {
-                            PosterCard(title: movie.title, imageURL: movie.posterURL, width: 110)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    ForEach(favoriteSeries) { series in
-                        NavigationLink {
-                            SeriesDetailView(series: series)
-                        } label: {
-                            PosterCard(title: series.title, imageURL: series.posterURL, width: 110)
-                        }
-                        .buttonStyle(.plain)
-                    }
+        HScrollSection(title: "Favorites", systemImage: "star") {
+            ForEach(favoriteChannels) { channel in
+                Button { playback.play(channel.playable) } label: {
+                    ChannelAvatarCard(channel: channel)
                 }
-                .padding(.horizontal)
+                .buttonStyle(.plain)
+            }
+            ForEach(favoriteMovies) { movie in
+                MovieCard(movie: movie, width: 110, showSubtitle: false)
+            }
+            ForEach(favoriteSeries) { series in
+                SeriesCard(series: series, width: 110, showSubtitle: false)
             }
         }
     }
 
-    private func favoriteChannelCard(_ channel: LiveChannel) -> some View {
-        VStack(spacing: 8) {
-            RemoteImage(url: channel.logoURL, systemFallback: "tv", contentMode: .fit)
-                .frame(width: 64, height: 64)
-                .padding(10)
-                .glassEffect(.regular, in: .circle)
-            Text(channel.name)
-                .font(.caption.weight(.medium))
-                .lineLimit(1)
-                .frame(width: 84)
+    private var trailersSection: some View {
+        HScrollSection(title: "Trailers", systemImage: "movieclapper") {
+            ForEach(trailerMovies) { movie in
+                if let trailer = movie.trailerPlayable {
+                    Button {
+                        playback.play(trailer)
+                    } label: {
+                        PosterCard(
+                            title: movie.title,
+                            imageURL: movie.posterURL,
+                            subtitle: "▶ Trailer",
+                            width: 150
+                        )
+                        .frame(width: 150)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 
     private var liveChannelsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Live Now", systemImage: "dot.radiowaves.left.and.right")
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 12) {
-                    ForEach(store.channels.prefix(15)) { channel in
-                        Button {
-                            playback.play(channel.playable)
-                        } label: {
-                            favoriteChannelCard(channel)
-                        }
-                        .buttonStyle(.plain)
-                    }
+        HScrollSection(title: "Live Now", systemImage: "dot.radiowaves.left.and.right") {
+            ForEach(store.channels.prefix(15)) { channel in
+                Button { playback.play(channel.playable) } label: {
+                    ChannelAvatarCard(channel: channel)
                 }
-                .padding(.horizontal)
+                .buttonStyle(.plain)
             }
         }
     }
 
     private var recentMoviesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Recently Added Movies", systemImage: "sparkles")
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 12) {
-                    ForEach(store.recentMovies) { movie in
-                        NavigationLink {
-                            MovieDetailView(movie: movie)
-                        } label: {
-                            PosterCard(
-                                title: movie.title,
-                                imageURL: movie.posterURL,
-                                subtitle: movie.group,
-                                width: 120
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal)
+        HScrollSection(title: "Recently Added Movies", systemImage: "sparkles") {
+            ForEach(store.recentMovies) { movie in
+                MovieCard(movie: movie, width: 120)
             }
         }
     }
 
     private var seriesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Series", systemImage: "rectangle.stack.badge.play")
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 12) {
-                    ForEach(store.series.prefix(20)) { series in
-                        NavigationLink {
-                            SeriesDetailView(series: series)
-                        } label: {
-                            PosterCard(
-                                title: series.title,
-                                imageURL: series.posterURL,
-                                subtitle: series.group,
-                                width: 120
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal)
+        HScrollSection(title: "Series", systemImage: "rectangle.stack.badge.play") {
+            ForEach(store.series.prefix(20)) { series in
+                SeriesCard(series: series, width: 120)
             }
         }
     }
